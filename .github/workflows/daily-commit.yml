@@ -1,0 +1,58 @@
+name: Daily Motivational Commit
+
+on:
+  schedule:
+    - cron: "0 12 * * *"   # 12:00 UTC every day
+  workflow_dispatch:         # allow manual trigger
+
+permissions:
+  contents: write
+
+jobs:
+  commit:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Fetch quote of the day
+        id: quote
+        run: |
+          RESPONSE=$(curl -s "https://zenquotes.io/api/today")
+
+          QUOTE=$(python3 -c "
+          import json, sys
+          data = json.loads(sys.stdin.read())
+          entry = data[0]
+          print(entry['q'])
+          " <<< "$RESPONSE")
+
+          AUTHOR=$(python3 -c "
+          import json, sys
+          data = json.loads(sys.stdin.read())
+          entry = data[0]
+          print(entry['a'])
+          " <<< "$RESPONSE")
+
+          echo "quote=$QUOTE" >> "$GITHUB_OUTPUT"
+          echo "author=$AUTHOR" >> "$GITHUB_OUTPUT"
+
+      - name: Append to daily log
+        run: |
+          DATE=$(date -u +%Y-%m-%d)
+          QUOTE="${{ steps.quote.outputs.quote }}"
+          AUTHOR="${{ steps.quote.outputs.author }}"
+          echo "[$DATE] \"$QUOTE\" — $AUTHOR" >> daily_log.txt
+
+      - name: Commit and push
+        run: |
+          DATE=$(date -u +%Y-%m-%d)
+          QUOTE="${{ steps.quote.outputs.quote }}"
+
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          git add daily_log.txt
+          git commit -m "📅 $DATE — \"$QUOTE\""
+          git push
